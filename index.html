@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SNES a Dois</title>
+<style>
+  :root{
+    --bg:#0e0f14; --panel:#171922; --panel2:#1f2230; --line:#2c3042;
+    --txt:#e9ebf3; --mut:#9097ad; --acc:#ff5a3c; --acc2:#ffb03c; --ok:#3ccf7a; --warn:#f2c94c; --bad:#ff5a5a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid var(--line)}
+  header .logo{font-weight:800;letter-spacing:.5px;font-size:20px}
+  header .logo span{color:var(--acc)}
+  header .sub{color:var(--mut);font-size:13px}
+  main{padding:22px;max-width:1300px;margin:0 auto}
+  .hidden{display:none!important}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;max-width:820px;margin:30px auto}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+  .card h2{margin:0 0 6px;font-size:18px}
+  .card p{margin:0 0 16px;color:var(--mut);font-size:14px}
+  button,.btn{appearance:none;border:0;border-radius:10px;padding:11px 16px;font:600 15px system-ui,sans-serif;cursor:pointer;background:var(--acc);color:#fff}
+  button:hover{filter:brightness(1.08)}
+  button.sec{background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
+  button.small{padding:6px 10px;font-size:13px}
+  button:disabled{opacity:.5;cursor:default}
+  input[type=text]{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--txt);font:600 18px ui-monospace,monospace;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px}
+  .file{display:block;border:2px dashed var(--line);border-radius:12px;padding:18px;text-align:center;color:var(--mut);cursor:pointer;margin-bottom:12px}
+  .file:hover{border-color:var(--acc)}
+  .file input{display:none}
+  .play{display:grid;grid-template-columns:1fr 330px;gap:18px;align-items:start}
+  @media (max-width:950px){.play{grid-template-columns:1fr}}
+  .screen{background:#000;border-radius:12px;overflow:hidden;aspect-ratio:4/3;position:relative;border:1px solid var(--line)}
+  #game{width:100%;height:100%}
+  #remote{width:100%;height:100%;object-fit:contain;background:#000;display:block;image-rendering:pixelated}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(0,0,0,.75);text-align:center;padding:20px}
+  .side{display:flex;flex-direction:column;gap:14px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .box h3{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--mut)}
+  .status{display:flex;align-items:center;gap:8px;font-weight:600}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--warn);flex:none}
+  .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)}
+  .ping{margin-top:8px;color:var(--mut);font-size:13px}
+  .ping b{color:var(--txt)}
+  .code{font:800 28px ui-monospace,monospace;letter-spacing:4px;color:var(--acc2)}
+  .link{word-break:break-all;font-size:12px;color:var(--mut);margin:6px 0 10px}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tabs button{flex:1}
+  .tabs button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .tabs button:not(.on){background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
+  table.map{width:100%;border-collapse:collapse;font-size:14px}
+  table.map td{padding:4px 0;border-bottom:1px solid var(--line)}
+  table.map td:last-child{text-align:right}
+  .key{display:inline-block;min-width:64px;padding:3px 8px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);font:600 13px ui-monospace,monospace;cursor:pointer;text-align:center}
+  .key.wait{border-color:var(--acc);color:var(--acc)}
+  .pad{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+  .pad span{padding:3px 7px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);font:600 12px ui-monospace,monospace;color:var(--mut)}
+  .pad span.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  .tip{font-size:13px;color:var(--mut)}
+  .tip b{color:var(--txt)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">SNES <span>a Dois</span></div>
+  <div class="sub">jogue online com um amigo direto no navegador</div>
+</header>
+
+<main>
+  <!-- ===== Tela inicial ===== -->
+  <section id="home">
+    <div class="cards">
+      <div class="card">
+        <h2>Criar sala</h2>
+        <p>Quem tem o jogo cria a sala. Você será o <b>Jogador 1</b>.</p>
+        <label class="file" id="romLabel">
+          <input type="file" id="romFile" accept=".smc,.sfc,.zip,.fig,.swc,.bs,.7z">
+          <span id="romName">Clique e escolha a ROM (.smc / .sfc / .zip)</span>
+        </label>
+        <button id="btnHost" disabled>Criar sala e iniciar</button>
+      </div>
+      <div class="card">
+        <h2>Entrar na sala</h2>
+        <p>Recebeu um link ou código? Você será o <b>Jogador 2</b>. Não precisa ter o jogo.</p>
+        <input type="text" id="joinCode" placeholder="CÓDIGO" maxlength="8">
+        <button id="btnJoin">Entrar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Tela do anfitrião (Jogador 1) ===== -->
+  <section id="hostView" class="hidden">
+    <div class="play">
+      <div class="screen"><div id="game"></div></div>
+      <div class="side">
+        <div class="box">
+          <h3>Sua sala</h3>
+          <div class="code" id="hostCode">-----</div>
+          <div class="link" id="hostLink"></div>
+          <button class="small" id="btnCopy">Copiar link para o amigo</button>
+        </div>
+        <div class="box">
+          <h3>Jogador 2</h3>
+          <div class="status"><span class="dot" id="hostDot"></span><span id="hostStatus">Conectando ao servidor…</span></div>
+          <div class="ping" id="hostPing"></div>
+        </div>
+        <div class="box">
+          <h3>Seus controles (Jogador 1)</h3>
+          <p class="tip"><b>Controle:</b> é só conectar e apertar um botão. Funciona direto.</p>
+          <p class="tip"><b>Teclado:</b> setas · X = B · Z = A · S = Y · A = X · Q/E = L/R · Enter = Start · V = Select</p>
+          <p class="tip">Dá pra mudar os botões na engrenagem do emulador → <b>Controles</b>.</p>
+        </div>
+        <div class="box tip">Deixe esta aba <b>aberta e visível</b> enquanto jogam. Se você minimizar ou trocar de aba, o jogo do seu amigo trava.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Tela do convidado (Jogador 2) ===== -->
+  <section id="guestView" class="hidden">
+    <div class="play">
+      <div class="screen" id="guestScreen">
+        <video id="remote" autoplay playsinline></video>
+        <div class="overlay" id="guestOverlay">
+          <div id="guestOverlayText">Conectando…</div>
+          <button id="btnEnter" class="hidden">Entrar na sala</button>
+        </div>
+      </div>
+      <div class="side">
+        <div class="box">
+          <h3>Conexão</h3>
+          <div class="status"><span class="dot" id="guestDot"></span><span id="guestStatus">Aguardando…</span></div>
+          <div class="ping" id="guestPing"></div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="small sec" id="btnFull">Tela cheia</button>
+            <button class="small sec" id="btnSound">Som: ligado</button>
+          </div>
+        </div>
+        <div class="box">
+          <h3>Seus controles (Jogador 2)</h3>
+          <div class="tabs">
+            <button class="small" id="tabKb">Teclado</button>
+            <button class="small" id="tabPad">Controle</button>
+          </div>
+          <div id="kbPanel">
+            <table class="map" id="kbTable"></table>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+              <span class="tip">Clique numa tecla para trocar.</span>
+              <button class="small sec" id="btnKbReset">Padrão</button>
+            </div>
+          </div>
+          <div id="padPanel" class="hidden">
+            <div class="status"><span class="dot" id="padDot"></span><span id="padStatus">Nenhum controle. Conecte e aperte um botão.</span></div>
+            <p class="tip" style="margin-top:10px">Botões no padrão do SNES: o de baixo é B, o da direita é A, o da esquerda é Y e o de cima é X. LB/RB = L/R.</p>
+          </div>
+          <div class="pad" id="padView"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(() => {
+  "use strict";
+
+  // ---------- Configuração ----------
+  const EJS_DATA = "https://cdn.emulatorjs.org/stable/data/";
+  const ROOM_PREFIX = "snesadois-";
+  const P2 = 1; // índice do Jogador 2 no emulador (0 = Jogador 1)
+
+  // Botões do SNES -> índice usado pelo emulador (RetroArch)
+  const BUTTONS = [
+    { id: "UP", idx: 4, label: "Cima" },
+    { id: "DOWN", idx: 5, label: "Baixo" },
+    { id: "LEFT", idx: 6, label: "Esquerda" },
+    { id: "RIGHT", idx: 7, label: "Direita" },
+    { id: "B", idx: 0, label: "B" },
+    { id: "A", idx: 8, label: "A" },
+    { id: "Y", idx: 1, label: "Y" },
+    { id: "X", idx: 9, label: "X" },
+    { id: "L", idx: 10, label: "L" },
+    { id: "R", idx: 11, label: "R" },
+    { id: "START", idx: 3, label: "Start" },
+    { id: "SELECT", idx: 2, label: "Select" },
+  ];
+  // Mesmo padrão de teclado do Jogador 1 (fica igual pros dois)
+  const DEFAULT_KEYS = {
+    UP: "ArrowUp", DOWN: "ArrowDown", LEFT: "ArrowLeft", RIGHT: "ArrowRight",
+    B: "KeyX", A: "KeyZ", Y: "KeyS", X: "KeyA", L: "KeyQ", R: "KeyE",
+    START: "Enter", SELECT: "KeyV",
+  };
+  // Gamepad no "standard mapping" do navegador -> botão do SNES
+  const PAD_MAP = { 0: "B", 1: "A", 2: "Y", 3: "X", 4: "L", 5: "R", 8: "SELECT", 9: "START", 12: "UP", 13: "DOWN", 14: "LEFT", 15: "RIGHT" };
+
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  };
+
+  // Permite apontar para outro servidor PeerJS (?ps=host:porta) — útil para testes
+  function peerOptions() {
+    const ps = params.get("ps");
+    if (!ps) return { debug: 1 };
+    const [host, port] = ps.split(":");
+    return { host, port: Number(port || 9000), path: "/", secure: false, debug: 1 };
+  }
+
+  function show(id) {
+    ["home", "hostView", "guestView"].forEach((s) => $(s).classList.toggle("hidden", s !== id));
+  }
+  function setStatus(dotId, txtId, text, state) {
+    $(txtId).textContent = text;
+    $(dotId).className = "dot" + (state ? " " + state : "");
+  }
+  function randomCode() {
+    const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let s = "";
+    for (let i = 0; i < 5; i++) s += abc[Math.floor(Math.random() * abc.length)];
+    return s;
+  }
+  function keyLabel(code) {
+    if (!code) return "—";
+    const names = { ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Enter: "Enter", Space: "Espaço",
+      ShiftLeft: "Shift", ShiftRight: "Shift dir.", ControlLeft: "Ctrl", ControlRight: "Ctrl dir.", Tab: "Tab", Backspace: "Backspace" };
+    if (names[code]) return names[code];
+    if (code.startsWith("Key")) return code.slice(3);
+    if (code.startsWith("Digit")) return code.slice(5);
+    if (code.startsWith("Numpad")) return "Num " + code.slice(6);
+    return code;
+  }
+
+  // =====================================================================
+  //  ANFITRIÃO (Jogador 1): roda o emulador e transmite para o amigo
+  // =====================================================================
+  const host = {
+    peer: null, conn: null, call: null, stream: null, streamReady: null,
+    simulate: null, p2State: 0, pingTimer: null,
+  };
+
+  let romFile = null;
+  $("romFile").addEventListener("change", (e) => {
+    romFile = e.target.files[0] || null;
+    $("romName").textContent = romFile ? romFile.name : "Clique e escolha a ROM (.smc / .sfc / .zip)";
+    $("btnHost").disabled = !romFile;
+  });
+  $("btnHost").addEventListener("click", () => { if (romFile) startHost(romFile); });
+
+  function startHost(file) {
+    show("hostView");
+    startEmulator(file);
+    openRoom();
+  }
+
+  function startEmulator(file) {
+    window.EJS_player = "#game";
+    window.EJS_core = "snes";
+    window.EJS_gameName = file.name.replace(/\.[^.]+$/, "");
+    window.EJS_gameUrl = URL.createObjectURL(file);
+    window.EJS_pathtodata = EJS_DATA;
+    window.EJS_startOnLoaded = true;
+    window.EJS_language = "pt-BR";
+    window.EJS_color = "#ff5a3c";
+    window.EJS_onGameStart = () => {
+      const emu = window.EJS_emulator;
+      emulatorStarted(emu.canvas, (player, idx, val) => emu.gameManager.simulateInput(player, idx, val), () => emu.Module);
+    };
+    const s = document.createElement("script");
+    s.src = EJS_DATA + "loader.js";
+    document.body.appendChild(s);
+  }
+
+  // Chamado quando o jogo começa a rodar. Separado para dar pra testar sem ROM.
+  function emulatorStarted(canvas, simulate, getModule) {
+    host.simulate = simulate;
+    let resolveReady;
+    host.streamReady = new Promise((r) => (resolveReady = r));
+
+    const video = canvas.captureStream(60).getVideoTracks()[0];
+    if (video) { try { video.contentHint = "motion"; } catch (e) {} }
+
+    // Espera o áudio do emulador aparecer (até ~6 s) e junta com o vídeo
+    const t0 = performance.now();
+    (function tryAudio() {
+      let audio = null;
+      try {
+        const M = getModule && getModule();
+        const al = M && M.AL && M.AL.currentCtx;
+        if (al && al.audioCtx && al.sources && Object.keys(al.sources).length) {
+          const ctx = al.audioCtx;
+          const dest = ctx.createMediaStreamDestination();
+          for (const k in al.sources) { try { al.sources[k].gain.connect(dest); } catch (e) {} }
+          audio = dest.stream.getAudioTracks()[0] || null;
+        }
+      } catch (e) { audio = null; }
+      if (audio || performance.now() - t0 > 6000) {
+        host.stream = new MediaStream([video, audio].filter(Boolean));
+        resolveReady(host.stream);
+      } else {
+        setTimeout(tryAudio, 300);
+      }
+    })();
+  }
+
+  function openRoom() {
+    const code = randomCode();
+    const link = location.origin + location.pathname + "?sala=" + code + (params.get("ps") ? "&ps=" + params.get("ps") : "");
+    $("hostCode").textContent = code;
+    $("hostLink").textContent = link;
+    $("btnCopy").onclick = async () => {
+      try { await navigator.clipboard.writeText(link); $("btnCopy").textContent = "Link copiado!"; }
+      catch (e) { prompt("Copie o link:", link); }
+      setTimeout(() => ($("btnCopy").textContent = "Copiar link para o amigo"), 2000);
+    };
+
+    host.peer = new Peer(ROOM_PREFIX + code, peerOptions());
+    host.peer.on("open", () => setStatus("hostDot", "hostStatus", "Aguardando seu amigo entrar…", ""));
+    host.peer.on("disconnected", () => { try { host.peer.reconnect(); } catch (e) {} });
+    host.peer.on("error", (err) => {
+      if (err.type === "unavailable-id") { host.peer.destroy(); openRoom(); return; }
+      if (err.type === "network" || err.type === "server-error") setStatus("hostDot", "hostStatus", "Problema com o servidor, tentando de novo…", "bad");
+      console.warn("PeerJS:", err);
+    });
+    host.peer.on("connection", (conn) => {
+      if (host.conn && host.conn.open) { conn.on("open", () => { conn.send({ t: "full" }); setTimeout(() => conn.close(), 500); }); return; }
+      host.conn = conn;
+      conn.on("open", () => hostGuestConnected(conn));
+      conn.on("data", (d) => hostOnData(d));
+      conn.on("close", () => hostGuestLeft(conn));
+      conn.on("error", () => hostGuestLeft(conn));
+    });
+  }
+
+  async function hostGuestConnected(conn) {
+    setStatus("hostDot", "hostStatus", "Amigo conectado! Preparando vídeo…", "ok");
+    const stream = await host.streamReady_wait();
+    if (host.conn !== conn) return;
+    const call = host.peer.call(conn.peer, stream);
+    host.call = call;
+    const pc = call.peerConnection;
+    const tune = () => {
+      pc.getSenders().forEach((s) => {
+        if (!s.track || s.track.kind !== "video") return;
+        try {
+          const p = s.getParameters();
+          if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+          p.encodings[0].maxBitrate = 4000000;
+          p.encodings[0].maxFramerate = 60;
+          p.degradationPreference = "maintain-framerate";
+          s.setParameters(p).catch(() => {});
+        } catch (e) {}
+      });
+    };
+    pc.addEventListener("connectionstatechange", () => {
+      if (pc.connectionState === "connected") { tune(); setStatus("hostDot", "hostStatus", "Amigo conectado e jogando!", "ok"); }
+      if (pc.connectionState === "failed") setStatus("hostDot", "hostStatus", "O vídeo não conseguiu conectar. Peça pro amigo recarregar a página.", "bad");
+    });
+    clearInterval(host.pingTimer);
+    host.lastSeen = performance.now();
+    host.pingTimer = setInterval(() => {
+      if (performance.now() - host.lastSeen > 5000) { hostGuestLeft(conn); try { conn.close(); } catch (e) {} return; }
+      if (conn.open) conn.send({ t: "ping", ts: performance.now() });
+    }, 1000);
+  }
+  host.streamReady_wait = () => {
+    if (host.stream) return Promise.resolve(host.stream);
+    return new Promise((res) => {
+      const wait = () => (host.streamReady ? host.streamReady.then(res) : setTimeout(wait, 200));
+      wait();
+    });
+  };
+
+  function hostOnData(d) {
+    if (!d || typeof d !== "object") return;
+    host.lastSeen = performance.now();
+    if (d.t === "bye") { const c = host.conn; hostGuestLeft(c); try { c && c.close(); } catch (e) {} return; }
+    if (d.t === "in") hostApplyInput(d.s >>> 0);
+    else if (d.t === "ping") host.conn && host.conn.send({ t: "pong", ts: d.ts });
+    else if (d.t === "pong") $("hostPing").innerHTML = "Ping: <b>" + Math.round(performance.now() - d.ts) + " ms</b>";
+  }
+
+  function hostApplyInput(state) {
+    if (!host.simulate) { host.p2State = 0; return; }
+    const changed = state ^ host.p2State;
+    if (!changed) return;
+    BUTTONS.forEach((b, i) => {
+      const bit = 1 << i;
+      if (changed & bit) host.simulate(P2, b.idx, state & bit ? 1 : 0);
+    });
+    host.p2State = state;
+  }
+
+  function hostGuestLeft(conn) {
+    if (host.conn !== conn) return;
+    hostApplyInput(0); // solta todos os botões do Jogador 2
+    clearInterval(host.pingTimer);
+    try { host.call && host.call.close(); } catch (e) {}
+    host.conn = null; host.call = null;
+    $("hostPing").textContent = "";
+    setStatus("hostDot", "hostStatus", "Amigo saiu. Aguardando ele voltar…", "");
+  }
+
+  // =====================================================================
+  //  CONVIDADO (Jogador 2): recebe o vídeo e manda os botões
+  // =====================================================================
+  const guest = { peer: null, conn: null, code: "", keys: {}, kbState: 0, padState: 0, sent: -1, remap: null, mode: "kb", muted: false };
+
+  $("btnJoin").addEventListener("click", () => {
+    const code = $("joinCode").value.trim().toUpperCase();
+    if (code.length < 4) { $("joinCode").focus(); return; }
+    startGuest(code);
+  });
+  $("joinCode").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btnJoin").click(); });
+
+  function startGuest(code) {
+    guest.code = code;
+    show("guestView");
+    loadKeys();
+    buildKbTable();
+    buildPadView();
+    setMode(store.get("snesadois-mode") || "kb");
+    setupGuestInput();
+    connectGuest();
+  }
+
+  function connectGuest() {
+    setStatus("guestDot", "guestStatus", "Procurando a sala " + guest.code + "…", "");
+    $("guestOverlayText").textContent = "Conectando na sala " + guest.code + "…";
+    $("guestOverlay").classList.remove("hidden");
+    if (guest.peer) { try { guest.peer.destroy(); } catch (e) {} }
+    guest.peer = new Peer(peerOptions());
+    guest.peer.on("open", () => {
+      const conn = guest.peer.connect(ROOM_PREFIX + guest.code, { reliable: true });
+      guest.conn = conn;
+      conn.on("open", () => {
+        setStatus("guestDot", "guestStatus", "Conectado! Esperando o vídeo…", "ok");
+        guest.sent = -1; sendInput(true);
+      });
+      conn.on("data", (d) => {
+        if (!d || typeof d !== "object") return;
+        if (d.t === "ping") conn.send({ t: "pong", ts: d.ts });
+        else if (d.t === "pong") $("guestPing").innerHTML = "Ping: <b>" + Math.round(performance.now() - d.ts) + " ms</b>";
+        else if (d.t === "full") guestFail("Essa sala já tem dois jogadores.");
+      });
+      conn.on("close", () => guestFail("A sala foi fechada ou a conexão caiu."));
+    });
+    guest.peer.on("call", (call) => {
+      call.answer();
+      call.on("stream", (stream) => {
+        const v = $("remote");
+        v.srcObject = stream;
+        v.muted = guest.muted;
+        try {
+          call.peerConnection.getReceivers().forEach((r) => {
+            if ("playoutDelayHint" in r) r.playoutDelayHint = 0;
+            if ("jitterBufferTarget" in r) r.jitterBufferTarget = 0;
+          });
+        } catch (e) {}
+        v.play().then(() => {
+          $("guestOverlay").classList.add("hidden");
+        }).catch(() => {
+          $("guestOverlayText").textContent = "Clique para começar";
+          $("btnEnter").classList.remove("hidden");
+        });
+        setStatus("guestDot", "guestStatus", "Jogando como Jogador 2", "ok");
+      });
+      call.on("close", () => guestFail("O vídeo foi encerrado."));
+    });
+    guest.peer.on("error", (err) => {
+      if (err.type === "peer-unavailable") guestFail("Sala não encontrada. Confira o código ou peça um link novo.");
+      else if (err.type === "network" || err.type === "server-error") guestFail("Problema de conexão com o servidor.");
+      console.warn("PeerJS:", err);
+    });
+  }
+
+  function guestFail(msg) {
+    releaseGuestButtons();
+    setStatus("guestDot", "guestStatus", msg, "bad");
+    $("guestPing").textContent = "";
+    $("guestOverlayText").textContent = msg;
+    $("btnEnter").textContent = "Tentar de novo";
+    $("btnEnter").classList.remove("hidden");
+    $("btnEnter").onclick = () => { $("btnEnter").classList.add("hidden"); connectGuest(); };
+    $("guestOverlay").classList.remove("hidden");
+  }
+
+  $("btnEnter").onclick = () => {
+    $("remote").play().catch(() => {});
+    $("guestOverlay").classList.add("hidden");
+    $("btnEnter").classList.add("hidden");
+  };
+  $("btnFull").onclick = () => {
+    const el = $("guestScreen");
+    if (document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen && el.requestFullscreen();
+  };
+  $("btnSound").onclick = () => {
+    guest.muted = !guest.muted;
+    $("remote").muted = guest.muted;
+    $("btnSound").textContent = "Som: " + (guest.muted ? "desligado" : "ligado");
+  };
+
+  // ----- Entrada do convidado: teclado + controle -----
+  function loadKeys() {
+    let saved = null;
+    try { saved = JSON.parse(store.get("snesadois-keys") || "null"); } catch (e) {}
+    guest.keys = Object.assign({}, DEFAULT_KEYS, saved || {});
+  }
+  function saveKeys() { store.set("snesadois-keys", JSON.stringify(guest.keys)); }
+
+  function buildKbTable() {
+    const t = $("kbTable");
+    t.innerHTML = "";
+    BUTTONS.forEach((b) => {
+      const tr = document.createElement("tr");
+      const td1 = document.createElement("td"); td1.textContent = b.label;
+      const td2 = document.createElement("td");
+      const k = document.createElement("span");
+      k.className = "key" + (guest.remap === b.id ? " wait" : "");
+      k.textContent = guest.remap === b.id ? "aperte…" : keyLabel(guest.keys[b.id]);
+      k.onclick = () => { guest.remap = b.id; buildKbTable(); };
+      td2.appendChild(k);
+      tr.append(td1, td2); t.appendChild(tr);
+    });
+  }
+  $("btnKbReset").onclick = () => { guest.keys = Object.assign({}, DEFAULT_KEYS); guest.remap = null; saveKeys(); buildKbTable(); };
+
+  function buildPadView() {
+    const v = $("padView"); v.innerHTML = "";
+    BUTTONS.forEach((b) => { const s = document.createElement("span"); s.textContent = b.label; s.dataset.id = b.id; v.appendChild(s); });
+  }
+  function renderPadView(state) {
+    $("padView").querySelectorAll("span").forEach((s, i) => s.classList.toggle("on", !!(state & (1 << i))));
+  }
+
+  function setMode(m) {
+    guest.mode = m === "pad" ? "pad" : "kb";
+    store.set("snesadois-mode", guest.mode);
+    $("tabKb").classList.toggle("on", guest.mode === "kb");
+    $("tabPad").classList.toggle("on", guest.mode === "pad");
+    $("kbPanel").classList.toggle("hidden", guest.mode !== "kb");
+    $("padPanel").classList.toggle("hidden", guest.mode !== "pad");
+  }
+  $("tabKb").onclick = () => setMode("kb");
+  $("tabPad").onclick = () => setMode("pad");
+
+  function bitFor(id) { return 1 << BUTTONS.findIndex((b) => b.id === id); }
+
+  function setupGuestInput() {
+    const codeToBits = () => {
+      const m = {};
+      for (const id in guest.keys) { const c = guest.keys[id]; if (c) m[c] = (m[c] || 0) | bitFor(id); }
+      return m;
+    };
+    let map = codeToBits();
+
+    window.addEventListener("keydown", (e) => {
+      if (guest.remap) {
+        e.preventDefault();
+        if (e.code !== "Escape") {
+          for (const id in guest.keys) if (guest.keys[id] === e.code) guest.keys[id] = "";
+          guest.keys[guest.remap] = e.code;
+          saveKeys(); map = codeToBits();
+        }
+        guest.remap = null; buildKbTable();
+        return;
+      }
+      if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+      const bits = map[e.code];
+      if (bits) { e.preventDefault(); guest.kbState |= bits; sendInput(); }
+    });
+    window.addEventListener("keyup", (e) => {
+      const bits = map[e.code];
+      if (bits) { e.preventDefault(); guest.kbState &= ~bits; sendInput(); }
+    });
+    window.addEventListener("blur", releaseGuestButtons);
+    window.addEventListener("pagehide", () => { try { guest.conn && guest.conn.open && guest.conn.send({ t: "bye" }); } catch (e) {} });
+    document.addEventListener("visibilitychange", () => { if (document.hidden) releaseGuestButtons(); });
+
+    // Controle (Gamepad API)
+    window.addEventListener("gamepadconnected", (e) => { if (guest.mode === "kb") setMode("pad"); });
+    function pollPad() {
+      let state = 0, name = null;
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      for (const gp of pads) {
+        if (!gp || !gp.connected) continue;
+        name = name || gp.id;
+        for (const i in PAD_MAP) {
+          const btn = gp.buttons[i];
+          if (btn && (btn.pressed || btn.value > 0.5)) state |= bitFor(PAD_MAP[i]);
+        }
+        const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, dz = 0.5;
+        if (ax < -dz) state |= bitFor("LEFT");
+        if (ax > dz) state |= bitFor("RIGHT");
+        if (ay < -dz) state |= bitFor("UP");
+        if (ay > dz) state |= bitFor("DOWN");
+      }
+      if (name) setStatus("padDot", "padStatus", "Controle detectado: " + name.replace(/\s*\(.*$/, ""), "ok");
+      else setStatus("padDot", "padStatus", "Nenhum controle. Conecte e aperte um botão.", "");
+      if (state !== guest.padState) { guest.padState = state; sendInput(); }
+      requestAnimationFrame(pollPad);
+    }
+    requestAnimationFrame(pollPad);
+
+    // Reenvia o estado de tempos em tempos (garante que nenhum botão fique "preso")
+    setInterval(() => sendInput(true), 250);
+    setInterval(() => { if (guest.conn && guest.conn.open) guest.conn.send({ t: "ping", ts: performance.now() }); }, 1000);
+  }
+
+  function releaseGuestButtons() { guest.kbState = 0; guest.padState = 0; sendInput(true); }
+
+  function sendInput(force) {
+    const s = (guest.kbState | guest.padState) >>> 0;
+    renderPadView(s);
+    if (!force && s === guest.sent) return;
+    guest.sent = s;
+    if (guest.conn && guest.conn.open) guest.conn.send({ t: "in", s });
+  }
+
+  // ---------- Início ----------
+  const sala = (params.get("sala") || "").trim().toUpperCase();
+  if (sala) startGuest(sala); else show("home");
+
+  // Ganchos para teste automatizado
+  window.__snesadois = { emulatorStarted, startHostRoomOnly: () => { show("hostView"); openRoom(); }, host, guest };
+})();
+</script>
+</body>
+</html>
