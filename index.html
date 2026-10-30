@@ -105,12 +105,14 @@
           <h3>Jogador 2</h3>
           <div class="status"><span class="dot" id="hostDot"></span><span id="hostStatus">Conectando ao servidor…</span></div>
           <div class="ping" id="hostPing"></div>
+          <div class="status" style="margin-top:10px;font-weight:500;font-size:14px"><span class="dot" id="hostSoundDot"></span><span id="hostSound">Preparando o som…</span></div>
         </div>
         <div class="box">
           <h3>Seus controles (Jogador 1)</h3>
-          <p class="tip"><b>Controle:</b> é só conectar e apertar um botão. Funciona direto.</p>
+          <div class="status"><span class="dot" id="hostPadDot"></span><span id="hostPadStatus">Nenhum controle. Conecte e aperte um botão.</span></div>
+          <div class="pad" id="hostPadView"></div>
+          <p class="tip" style="margin-top:12px"><b>Controle:</b> o de baixo é B, o da direita é A, o da esquerda é Y, o de cima é X. LB/RB = L/R. Analógico ou direcional.</p>
           <p class="tip"><b>Teclado:</b> setas · X = B · Z = A · S = Y · A = X · Q/E = L/R · Enter = Start · V = Select</p>
-          <p class="tip">Dá pra mudar os botões na engrenagem do emulador → <b>Controles</b>.</p>
         </div>
         <div class="box tip">Deixe esta aba <b>aberta e visível</b> enquanto jogam. Se você minimizar ou trocar de aba, o jogo do seu amigo trava.</div>
       </div>
@@ -122,6 +124,7 @@
     <div class="play">
       <div class="screen" id="guestScreen">
         <video id="remote" autoplay playsinline></video>
+        <button id="soundBanner" class="hidden" style="position:absolute;left:50%;top:16px;transform:translateX(-50%);z-index:5;box-shadow:0 6px 24px rgba(0,0,0,.5)">🔊 Clique aqui para ativar o som</button>
         <div class="overlay" id="guestOverlay">
           <div id="guestOverlayText">Conectando…</div>
           <button id="btnEnter" class="hidden">Entrar na sala</button>
@@ -167,7 +170,8 @@
   "use strict";
 
   // ---------- Configuração ----------
-  const EJS_DATA = "https://cdn.emulatorjs.org/stable/data/";
+  const params = new URLSearchParams(location.search);
+  const EJS_DATA = params.get("ejs") || "https://cdn.emulatorjs.org/stable/data/";
   const ROOM_PREFIX = "snesadois-";
   const P2 = 1; // índice do Jogador 2 no emulador (0 = Jogador 1)
 
@@ -196,7 +200,6 @@
   const PAD_MAP = { 0: "B", 1: "A", 2: "Y", 3: "X", 4: "L", 5: "R", 8: "SELECT", 9: "START", 12: "UP", 13: "DOWN", 14: "LEFT", 15: "RIGHT" };
 
   const $ = (id) => document.getElementById(id);
-  const params = new URLSearchParams(location.search);
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
@@ -267,6 +270,9 @@
     window.EJS_color = "#ff5a3c";
     window.EJS_onGameStart = () => {
       const emu = window.EJS_emulator;
+      // O leitor de controle do EmulatorJS perde o controle quando o Windows/Chrome
+      // o "reconecta" com outro número. Desligamos e usamos o nosso (startHostPad).
+      try { emu.gamepad && emu.gamepad.terminate(); } catch (e) {}
       emulatorStarted(emu.canvas, (player, idx, val) => emu.gameManager.simulateInput(player, idx, val), () => emu.Module);
     };
     const s = document.createElement("script");
@@ -277,6 +283,7 @@
   // Chamado quando o jogo começa a rodar. Separado para dar pra testar sem ROM.
   function emulatorStarted(canvas, simulate, getModule) {
     host.simulate = simulate;
+    startHostPad(simulate);
     let resolveReady;
     host.streamReady = new Promise((r) => (resolveReady = r));
 
@@ -290,20 +297,61 @@
       try {
         const M = getModule && getModule();
         const al = M && M.AL && M.AL.currentCtx;
-        if (al && al.audioCtx && al.sources && Object.keys(al.sources).length) {
-          const ctx = al.audioCtx;
-          const dest = ctx.createMediaStreamDestination();
-          for (const k in al.sources) { try { al.sources[k].gain.connect(dest); } catch (e) {} }
+        if (al && al.audioCtx && al.gain) {
+          const dest = al.audioCtx.createMediaStreamDestination();
+          al.gain.connect(dest); // mesmo som que sai nas suas caixas
           audio = dest.stream.getAudioTracks()[0] || null;
         }
       } catch (e) { audio = null; }
-      if (audio || performance.now() - t0 > 6000) {
+      if (audio || performance.now() - t0 > 15000) {
         host.stream = new MediaStream([video, audio].filter(Boolean));
+        setStatus("hostSoundDot", "hostSound", audio ? "Som sendo enviado pro amigo" : "Não consegui capturar o som", audio ? "ok" : "bad");
         resolveReady(host.stream);
       } else {
         setTimeout(tryAudio, 300);
       }
     })();
+  }
+
+  // Lê todos os controles conectados e devolve o estado dos botões do SNES
+  function readPads() {
+    let state = 0, name = null;
+    let pads = [];
+    try { pads = navigator.getGamepads ? navigator.getGamepads() : []; } catch (e) {}
+    for (const gp of pads) {
+      if (!gp || !gp.connected) continue;
+      name = name || gp.id;
+      for (const i in PAD_MAP) {
+        const btn = gp.buttons[i];
+        if (btn && (btn.pressed || btn.value > 0.5)) state |= bitFor(PAD_MAP[i]);
+      }
+      const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, dz = 0.5;
+      if (ax < -dz) state |= bitFor("LEFT");
+      if (ax > dz) state |= bitFor("RIGHT");
+      if (ay < -dz) state |= bitFor("UP");
+      if (ay > dz) state |= bitFor("DOWN");
+    }
+    return { state, name };
+  }
+  function padName(n) { return n.replace(/\s*\(.*$/, "") || "controle"; }
+
+  // Controle do Jogador 1: lido por nós e enviado ao emulador
+  function startHostPad(simulate) {
+    buildPadView("hostPadView");
+    let last = 0, lastName = undefined;
+    setInterval(() => {
+      const { state, name } = readPads();
+      if (name !== lastName) {
+        lastName = name;
+        if (name) setStatus("hostPadDot", "hostPadStatus", "Controle funcionando: " + padName(name), "ok");
+        else setStatus("hostPadDot", "hostPadStatus", "Nenhum controle. Conecte e aperte um botão.", "");
+      }
+      const changed = state ^ last;
+      if (!changed) return;
+      BUTTONS.forEach((b, i) => { const bit = 1 << i; if (changed & bit) simulate(0, b.idx, state & bit ? 1 : 0); });
+      last = state;
+      renderPadView(state, "hostPadView");
+    }, 8);
   }
 
   function openRoom() {
@@ -449,9 +497,11 @@
       conn.on("close", () => guestFail("A sala foi fechada ou a conexão caiu."));
     });
     guest.peer.on("call", (call) => {
+      guest.call = call;
       call.answer();
       call.on("stream", (stream) => {
         const v = $("remote");
+        if (v.srcObject === stream) return; // o PeerJS avisa 1x por trilha (vídeo e áudio)
         v.srcObject = stream;
         v.muted = guest.muted;
         try {
@@ -460,12 +510,18 @@
             if ("jitterBufferTarget" in r) r.jitterBufferTarget = 0;
           });
         } catch (e) {}
+        $("guestOverlay").classList.add("hidden");
+        const hasAudio = stream.getAudioTracks().length > 0;
         v.play().then(() => {
-          $("guestOverlay").classList.add("hidden");
+          $("soundBanner").classList.add("hidden");
         }).catch(() => {
-          $("guestOverlayText").textContent = "Clique para começar";
-          $("btnEnter").classList.remove("hidden");
+          // Chrome bloqueia som automático: toca mudo e pede um clique
+          v.muted = true; guest.muted = true;
+          $("btnSound").textContent = "Som: desligado";
+          v.play().catch(() => {});
+          if (hasAudio) $("soundBanner").classList.remove("hidden");
         });
+        if (!hasAudio) setTimeout(() => setStatus("guestDot", "guestStatus", "Jogando (sem som: o anfitrião não enviou áudio)", "ok"), 50);
         setStatus("guestDot", "guestStatus", "Jogando como Jogador 2", "ok");
       });
       call.on("close", () => guestFail("O vídeo foi encerrado."));
@@ -492,6 +548,13 @@
     $("remote").play().catch(() => {});
     $("guestOverlay").classList.add("hidden");
     $("btnEnter").classList.add("hidden");
+  };
+  $("soundBanner").onclick = () => {
+    guest.muted = false;
+    $("remote").muted = false;
+    $("remote").play().catch(() => {});
+    $("btnSound").textContent = "Som: ligado";
+    $("soundBanner").classList.add("hidden");
   };
   $("btnFull").onclick = () => {
     const el = $("guestScreen");
@@ -528,12 +591,12 @@
   }
   $("btnKbReset").onclick = () => { guest.keys = Object.assign({}, DEFAULT_KEYS); guest.remap = null; saveKeys(); buildKbTable(); };
 
-  function buildPadView() {
-    const v = $("padView"); v.innerHTML = "";
+  function buildPadView(id) {
+    const v = $(id || "padView"); v.innerHTML = "";
     BUTTONS.forEach((b) => { const s = document.createElement("span"); s.textContent = b.label; s.dataset.id = b.id; v.appendChild(s); });
   }
-  function renderPadView(state) {
-    $("padView").querySelectorAll("span").forEach((s, i) => s.classList.toggle("on", !!(state & (1 << i))));
+  function renderPadView(state, id) {
+    $(id || "padView").querySelectorAll("span").forEach((s, i) => s.classList.toggle("on", !!(state & (1 << i))));
   }
 
   function setMode(m) {
@@ -583,22 +646,8 @@
     // Controle (Gamepad API)
     window.addEventListener("gamepadconnected", (e) => { if (guest.mode === "kb") setMode("pad"); });
     function pollPad() {
-      let state = 0, name = null;
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      for (const gp of pads) {
-        if (!gp || !gp.connected) continue;
-        name = name || gp.id;
-        for (const i in PAD_MAP) {
-          const btn = gp.buttons[i];
-          if (btn && (btn.pressed || btn.value > 0.5)) state |= bitFor(PAD_MAP[i]);
-        }
-        const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0, dz = 0.5;
-        if (ax < -dz) state |= bitFor("LEFT");
-        if (ax > dz) state |= bitFor("RIGHT");
-        if (ay < -dz) state |= bitFor("UP");
-        if (ay > dz) state |= bitFor("DOWN");
-      }
-      if (name) setStatus("padDot", "padStatus", "Controle detectado: " + name.replace(/\s*\(.*$/, ""), "ok");
+      const { state, name } = readPads();
+      if (name) setStatus("padDot", "padStatus", "Controle detectado: " + padName(name), "ok");
       else setStatus("padDot", "padStatus", "Nenhum controle. Conecte e aperte um botão.", "");
       if (state !== guest.padState) { guest.padState = state; sendInput(); }
       requestAnimationFrame(pollPad);
