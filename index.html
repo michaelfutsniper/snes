@@ -339,12 +339,24 @@
   function startHostPad(simulate) {
     buildPadView("hostPadView");
     let last = 0, lastName = undefined;
+    // Com esses "ouvintes" o Chrome volta a ler o controle direito quando a aba volta a ficar visível
+    window.addEventListener("gamepadconnected", () => { lastName = undefined; });
+    window.addEventListener("gamepaddisconnected", () => { lastName = undefined; });
+    // Ao sair/voltar da aba: solta todos os botões e recomeça a leitura do zero
+    const resync = () => {
+      BUTTONS.forEach((b, i) => { if (last & (1 << i)) simulate(0, b.idx, 0); });
+      last = 0; lastName = undefined;
+      renderPadView(0, "hostPadView");
+    };
+    document.addEventListener("visibilitychange", resync);
+    window.addEventListener("focus", resync);
+    window.addEventListener("blur", resync);
     setInterval(() => {
       const { state, name } = readPads();
       if (name !== lastName) {
         lastName = name;
         if (name) setStatus("hostPadDot", "hostPadStatus", "Controle funcionando: " + padName(name), "ok");
-        else setStatus("hostPadDot", "hostPadStatus", "Nenhum controle. Conecte e aperte um botão.", "");
+        else setStatus("hostPadDot", "hostPadStatus", "Controle não detectado. Aperte qualquer botão dele.", "");
       }
       const changed = state ^ last;
       if (!changed) return;
